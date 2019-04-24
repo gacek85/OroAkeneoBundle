@@ -8,9 +8,14 @@ use Oro\Bundle\AkeneoBundle\Tools\FieldConfigModelFieldNameGenerator;
 use Oro\Bundle\EntityBundle\EntityConfig\DatagridScope;
 use Oro\Bundle\EntityConfigBundle\ImportExport\DataConverter\EntityFieldDataConverter;
 
+/**
+ * Converts data to import format.
+ */
 class AttributeDataConverter extends EntityFieldDataConverter
 {
     use AkeneoIntegrationTrait;
+
+    private const ENTITY_LABEL_MAX_LENGTH = 50;
 
     /**
      * @var ManagerRegistry
@@ -22,12 +27,13 @@ class AttributeDataConverter extends EntityFieldDataConverter
      */
     public function convertToImportFormat(array $importedRecord, $skipNullValues = true)
     {
+        $importedRecord['code'] = FieldConfigModelFieldNameGenerator::generate($importedRecord['code']);
         $importedRecord['type'] = AttributeTypeConverter::convert($importedRecord['type']);
         $importedRecord['useable_as_grid_filter'] =
             !in_array($importedRecord['type'], ['pim_catalog_file', 'pim_catalog_date']);
         $importedRecord['search.searchable'] = $importedRecord['useable_as_grid_filter'];
         $importedRecord['datagrid.is_visible'] = DatagridScope::IS_VISIBLE_HIDDEN;
-        $importedRecord['fieldName'] = FieldConfigModelFieldNameGenerator::generate($importedRecord['code']);
+        $importedRecord['fieldName'] = $importedRecord['code'];
         $importedRecord['entity:id'] = (int)$this->getContext()->getValue('entity_id');
         $this->setLabels($importedRecord);
         $this->setEnumOptions($importedRecord);
@@ -46,6 +52,7 @@ class AttributeDataConverter extends EntityFieldDataConverter
         $defaultLocale = $this->getTransport()->getMappedAkeneoLocale($defaultLocalization->getLanguageCode());
 
         $importedRecord['entity.label'] = $importedRecord['labels'][$defaultLocale] ?? $importedRecord['code'];
+        $importedRecord['entity.label'] = substr($importedRecord['entity.label'], 0, self::ENTITY_LABEL_MAX_LENGTH);
         $importedRecord['translatedLabels'] = [];
 
         foreach ($this->getTransport()->getAkeneoLocales() as $akeneoLocale) {
@@ -63,7 +70,7 @@ class AttributeDataConverter extends EntityFieldDataConverter
      *
      * @param array $importedRecord
      */
-    private function setEnumOptions(array &$importedRecord)
+    private function setEnumOptions(array &$importedRecord): void
     {
         if (empty($importedRecord['options']) || !is_array($importedRecord['options'])) {
             return;
@@ -74,6 +81,7 @@ class AttributeDataConverter extends EntityFieldDataConverter
         $defaultLocale = $transport->getMappedAkeneoLocale($defaultLocalization->getLanguageCode());
 
         foreach ($importedRecord['options'] as $key => &$option) {
+            $option['code'] = FieldConfigModelFieldNameGenerator::generate($option['code']);
             $optionKey = sprintf('enum.enum_options.%d.id', $key);
             $importedRecord[$optionKey] = $option['code'];
             $optionKey = sprintf('enum.enum_options.%d.label', $key);

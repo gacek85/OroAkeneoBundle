@@ -6,6 +6,7 @@ use Doctrine\Common\Util\Inflector;
 use Oro\Bundle\AkeneoBundle\Entity\AkeneoSettings;
 use Oro\Bundle\AkeneoBundle\Tools\AttributeFamilyCodeGenerator;
 use Oro\Bundle\AkeneoBundle\Tools\AttributeTypeConverter;
+use Oro\Bundle\AkeneoBundle\Tools\FieldConfigModelFieldNameGenerator;
 use Oro\Bundle\BatchBundle\Item\Support\ClosableInterface;
 use Oro\Bundle\EntityConfigBundle\Config\ConfigManager;
 use Oro\Bundle\EntityConfigBundle\Generator\SlugGenerator;
@@ -165,18 +166,7 @@ class ProductDataConverter extends BaseProductDataConverter implements ContextAw
         $fieldMapping = $this->getFieldMapping();
 
         foreach ($importedRecord['values'] as $attributeCode => $value) {
-            $attributeCodes = [
-                $attributeCode,
-                Inflector::singularize(Inflector::camelize($attributeCode)),
-                Inflector::pluralize(Inflector::camelize($attributeCode)),
-            ];
-
-            $field = null;
-            foreach ($attributeCodes as $guessedCode) {
-                if (!empty($fieldMapping[$guessedCode])) {
-                    $field = $fieldMapping[$guessedCode];
-                }
-            }
+            $field = $this->getField($attributeCode, $fieldMapping);
 
             if (!$field) {
                 unset($importedRecord['values'][$attributeCode]);
@@ -202,7 +192,9 @@ class ProductDataConverter extends BaseProductDataConverter implements ContextAw
                 continue;
             }
 
-            if (AttributeTypeConverter::convert($value[0]['type']) !== $field['type']) {
+            $valueFirstItem = array_values($value)[0];
+
+            if (AttributeTypeConverter::convert($valueFirstItem['type']) !== $field['type']) {
                 unset($importedRecord['values'][$attributeCode]);
 
                 continue;
@@ -216,7 +208,9 @@ class ProductDataConverter extends BaseProductDataConverter implements ContextAw
                     $importedRecord[$field['name']] = $this->processMultiEnumType($value);
                     break;
                 case 'file':
-                    $importedRecord[$field['name']] = $this->processFileType($value);
+                    if ($valueFirstItem['data']) {
+                        $importedRecord[$field['name']] = $this->processFileType($value);
+                    }
                     break;
                 default:
                     $importedRecord[$field['name']] = $this->processBasicType($value);
@@ -225,6 +219,30 @@ class ProductDataConverter extends BaseProductDataConverter implements ContextAw
 
             unset($importedRecord['values'][$attributeCode]);
         }
+    }
+
+    /**
+     * Gets field by attribute code.
+     *
+     * @param string $attributeCode
+     * @param array $fieldMapping
+     * @return array|null
+     */
+    private function getField(string $attributeCode, array $fieldMapping): ?array
+    {
+        $attributeCodes = [
+            $attributeCode,
+            Inflector::singularize(Inflector::camelize($attributeCode)),
+            Inflector::pluralize(Inflector::camelize($attributeCode)),
+        ];
+
+        foreach ($attributeCodes as $guessedCode) {
+            if (!empty($fieldMapping[$guessedCode])) {
+                $field = $fieldMapping[$guessedCode];
+            }
+        }
+
+        return $field ?? null;
     }
 
     private function getFieldMapping()
@@ -338,12 +356,12 @@ class ProductDataConverter extends BaseProductDataConverter implements ContextAw
      *
      * @return array
      */
-    private function processEnumType(array $value)
+    private function processEnumType(array $value): array
     {
         $item = array_shift($value);
 
         return [
-            'id' => $item['data'],
+            'id' => $this->prepareEnumId($item['data']),
         ];
     }
 
@@ -352,7 +370,7 @@ class ProductDataConverter extends BaseProductDataConverter implements ContextAw
      *
      * @return array
      */
-    private function processMultiEnumType(array $value)
+    private function processMultiEnumType(array $value): array
     {
         $ids = [];
         $result = [];
@@ -363,11 +381,22 @@ class ProductDataConverter extends BaseProductDataConverter implements ContextAw
 
         foreach (array_unique($ids) as $data) {
             $result[] = [
-                'id' => $data,
+                'id' => $this->prepareEnumId($data),
             ];
         }
 
         return $result;
+    }
+
+    /**
+     * Prepares enum id like saved already attribute code.
+     *
+     * @param string|null $id
+     * @return string|null
+     */
+    private function prepareEnumId(?string $id): ?string
+    {
+        return $id !== null ? FieldConfigModelFieldNameGenerator::generate($id) : null;
     }
 
     /**
