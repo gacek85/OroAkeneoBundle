@@ -24,7 +24,7 @@ class AttributeDataConverter extends EntityFieldDataConverter
     /**
      * {@inheritdoc}
      */
-    public function convertToImportFormat(array $importedRecord, $skipNullValues = true): void
+    public function convertToImportFormat(array $importedRecord, $skipNullValues = true)
     {
         $importedRecord['code'] = FieldConfigModelFieldNameGenerator::generate($importedRecord['code']);
         $importedRecord['type'] = AttributeTypeConverter::convert($importedRecord['type']);
